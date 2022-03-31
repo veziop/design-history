@@ -88,3 +88,21 @@ class PublicUserTest(TestCase):
             email=payload['email']
         ).exists()
         self.assertFalse(user_exists)
+
+    def test_whitespaces_not_in_password(self):
+        """Test that the password does not contain any whitespace characters"""
+        payload = {
+            'email': 'test@email.com',
+            'name': 'John Doe',
+            'password': 'my password36'
+        }
+        # Capture the response from the user creation attempt
+        response = self.client.post(CREATE_USER_URL, payload)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Lookup if the user exists in the serverside
+        user_exists = get_user_model().objects.filter(
+            email=payload['email']
+        ).exists()
+        self.assertFalse(user_exists)

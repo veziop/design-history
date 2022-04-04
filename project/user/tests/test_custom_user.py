@@ -49,13 +49,17 @@ class PublicUserTest(APITestCase):
         # Create user with the defined payload
         self.client.post(REGISTER_USER_URL, payload)
 
-        # Now attempt to create another user with the same payload and capture the response
+        # Now attempt to create another user with the same payload
+        # and capture the response
         response = self.client.post(REGISTER_USER_URL, payload)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_password_minimum_length(self):
-        """Test that the password intended for user creation is longer than 8 characters"""
+        """
+        Test that the password intended for user
+        creation is longer than 8 characters
+        """
         payload = {
             'email': 'test@email.com',
             'name': 'John Doe',
@@ -136,7 +140,7 @@ class PrivateUserTest(APITestCase):
         self.user = get_user_model().objects.create_user(
             email='test@email.com',
             name='Test Johnson',
-            password= self.password
+            password=self.password
         )
         self.client = APIClient()
         self.refresh = RefreshToken.for_user(self.user)

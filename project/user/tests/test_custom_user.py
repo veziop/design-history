@@ -6,7 +6,7 @@ from rest_framework import status
 
 
 REGISTER_USER_URL = reverse('user:register')
-# ABOUT_USER_URL = reverse('user:aboutme')
+ABOUT_USER_URL = reverse('user:aboutme')
 JWT_OBTAIN_URL = reverse('user:token_obtain_pair')
 JWT_REFRESH_URL = reverse('user:token_refresh')
 JWT_VERIFY_URL = reverse('user:token_verify')
@@ -122,11 +122,14 @@ class PrivateUserTest(APITestCase):
         This setUp method is run before every test method.
         Register a test user and create a JWT assigned to it.
 
-        As per recommended by the simplejwt docs, RefreshToken is used to manually create a JSON Web Token.
-        https://django-rest-framework-simplejwt.readthedocs.io/en/latest/creating_tokens_manually.html
+        As per recommended by the simplejwt docs, RefreshToken is
+        used to manually create a JSON Web Token.
+        https://django-rest-framework-simplejwt.readthedocs.io \
+        /en/latest/creating_tokens_manually.html
         """
 
-        # password is saved as a class attribute so it can be passed later in a dictionary,
+        # password is saved as a class attribute so it
+        # can be passed later in a dictionary,
         # otherwise the password is not stored in self.user
         self.password = 'testpass876'
 
@@ -137,6 +140,7 @@ class PrivateUserTest(APITestCase):
         )
         self.client = APIClient()
         self.refresh = RefreshToken.for_user(self.user)
+        self.access = self.refresh.access_token
 
     def test_user_success_jwt(self):
         """Test that a JWT is generated"""
@@ -149,17 +153,18 @@ class PrivateUserTest(APITestCase):
         self.assertIn('refresh', response.data)
         self.assertIn('access', response.data)
 
+        # Save the access JWT to be used solely in this test
         access_jwt = response.data.get('access')
 
         response = self.client.post(JWT_VERIFY_URL, data={'token': access_jwt})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, {})
 
-
-
     def test_refresh_jwt(self):
         """Test that a new JWT is generated with the refresh endpoint"""
-        response = self.client.post(JWT_REFRESH_URL, data={'refresh': str(self.refresh)})
+        response = self.client.post(JWT_REFRESH_URL,
+                                    data={'refresh': str(self.refresh)}
+                                    )
         new_jwt = response.data.get('access', None)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -167,9 +172,33 @@ class PrivateUserTest(APITestCase):
         self.assertTrue(new_jwt)
         self.assertEqual(new_jwt[:2], 'ey')
 
-
     def test_user_jwt_verify(self):
         """Test that the JWT verification endpoint works as expected"""
-        response = self.client.post(JWT_VERIFY_URL, {'token': str(self.refresh.access_token)})
+        # Firstly test the refresh JWT
+        response = self.client.post(JWT_VERIFY_URL,
+                                    {'token': str(self.refresh)}
+                                    )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, {})
+
+        # Lastly, the access JWT
+        response = self.client.post(JWT_VERIFY_URL,
+                                    {'token': str(self.access)}
+                                    )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {})
+
+    def test_user_me(self):
+        """
+        Test that valid access JWT in aboutme endpoint returns
+        information on the user
+        """
+        # Edit the request header to include the JWT
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
+        response = self.client.get(ABOUT_USER_URL)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {
+            'email': self.user.email,
+            'name': self.user.name
+        })

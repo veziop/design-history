@@ -9,3 +9,14 @@ class RegisterView(generics.CreateAPIView):
     """
     serializer_class = UserSerializer
     queryset = get_user_model().objects.all()
+
+
+class AboutMeView(generics.RetrieveAPIView):
+    """
+    View user credentials for the JWT in header.
+    """
+    serializer_class = UserSerializer
+
+    def get_object(self):
+        """Retrieve the user's credentials"""
+        return self.request.user

@@ -1,12 +1,15 @@
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient, APITestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import status
 
 
 REGISTER_USER_URL = reverse('user:register')
+# ABOUT_USER_URL = reverse('user:aboutme')
 JWT_OBTAIN_URL = reverse('user:token_obtain_pair')
-JWT_REFRESH_URL = reverse('user:token_refresh_pair')
+JWT_REFRESH_URL = reverse('user:token_refresh')
+JWT_VERIFY_URL = reverse('user:token_verify')
 
 
 class PublicUserTest(APITestCase):
@@ -115,35 +118,58 @@ class PrivateUserTest(APITestCase):
     """
 
     def setUp(self):
-        """Register a test user to use in each test"""
+        """
+        This setUp method is run before every test method.
+        Register a test user and create a JWT assigned to it.
+
+        As per recommended by the simplejwt docs, RefreshToken is used to manually create a JSON Web Token.
+        https://django-rest-framework-simplejwt.readthedocs.io/en/latest/creating_tokens_manually.html
+        """
+
+        # password is saved as a class attribute so it can be passed later in a dictionary,
+        # otherwise the password is not stored in self.user
+        self.password = 'testpass876'
+
         self.user = get_user_model().objects.create_user(
             email='test@email.com',
             name='Test Johnson',
-            password='testpass876'
+            password= self.password
         )
         self.client = APIClient()
-        self.client.force_authenticate(user=self.user)  # TODO: investigate; does this line make sense with JWT?
+        self.refresh = RefreshToken.for_user(self.user)
 
     def test_user_success_jwt(self):
         """Test that a JWT is generated"""
-        user = {
-            'email': self.user.get('email'),
-            'name': self.user.get('name'),
-            'password': self.user.get('password'),
-        }
-
-        response = self.client.post(JWT_OBTAIN_URL, data=user)
+        response = self.client.post(JWT_OBTAIN_URL, data={
+            'email': self.user.email,
+            'password': self.password
+        })
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('token', response.data)
+        self.assertIn('refresh', response.data)
+        self.assertIn('access', response.data)
+
+        access_jwt = response.data.get('access')
+
+        response = self.client.post(JWT_VERIFY_URL, data={'token': access_jwt})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {})
+
+
 
     def test_refresh_jwt(self):
-        """Test that a new JWT is generated"""
-        response = self.client.post(JWT_OBTAIN_URL, data=self.user, format='json')
+        """Test that a new JWT is generated with the refresh endpoint"""
+        response = self.client.post(JWT_REFRESH_URL, data={'refresh': str(self.refresh)})
+        new_jwt = response.data.get('access', None)
 
-        jwt = response.data.get('token', None)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+        self.assertTrue(new_jwt)
+        self.assertEqual(new_jwt[:2], 'ey')
 
-        if jwt:
-            response = self.client.post(JWT_REFRESH_URL, data=jwt, format='json')
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertIn('token', response.data)
+
+    def test_user_jwt_verify(self):
+        """Test that the JWT verification endpoint works as expected"""
+        response = self.client.post(JWT_VERIFY_URL, {'token': str(self.refresh.access_token)})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {})
